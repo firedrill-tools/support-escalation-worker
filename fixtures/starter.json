@@ -1,0 +1,8 @@
+{
+  "tickets": [
+    { "id": "T-501", "customer": "Maya Chen", "subject": "Cannot access account", "status": "open", "last_customer_at": "2026-10-15T10:00:00Z", "last_agent_at": null },
+    { "id": "T-502", "customer": "Noah Singh", "subject": "Resolved invoice question", "status": "resolved", "last_customer_at": "2026-10-15T09:00:00Z", "last_agent_at": "2026-10-15T09:30:00Z" },
+    { "id": "T-503", "customer": "Lina Ortiz", "subject": "Order status", "status": "open", "last_customer_at": "2026-10-15T10:00:00Z", "last_agent_at": "2026-10-15T11:00:00Z" },
+    { "id": "T-504", "customer": "Eli Park", "subject": "Password reset", "status": "open", "last_customer_at": "2026-10-15T11:30:00Z", "last_agent_at": null }
+  ]
+}

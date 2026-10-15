@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "support-escalation-worker"
+version = "0.1.0"
+description = "Anthropic-backed synthetic support escalation webhook with Pipedream action seam"
+requires-python = ">=3.12"
+dependencies = ["anthropic>=1,<2", "pipedream==2.1.20", "fastapi==0.143.2", "uvicorn==0.54.0", "pydantic>=2.12,<3"]
+
+[project.scripts]
+support-escalation = "support_escalation.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/support_escalation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
