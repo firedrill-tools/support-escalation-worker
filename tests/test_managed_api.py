@@ -216,7 +216,7 @@ def test_real_asgi_admission_and_service_stop_cancel_active_model_then_refuse_ne
 
 
 @contextmanager
-def served(tmp_path, options):
+def served(tmp_path, options, *, pipedream_settings=None, canonical=False):
     env = {
         k: os.environ[k]
         for k in (
@@ -232,10 +232,14 @@ def served(tmp_path, options):
         if k in os.environ
     }
     env.update(ANTHROPIC_API_KEY=KEY, EVENT_TOKEN=TOKEN)
+    if pipedream_settings is not None:
+        from support_escalation.delivery import ENV
+
+        env.update({ENV[k]: v for k, v in pipedream_settings.items() if v is not None})
     args = [
         sys.executable,
         "-m",
-        "support_escalation.managed_server",
+        "support_escalation.cli" if canonical else "support_escalation.managed_server",
         "--db",
         options["database"],
         "--port",
@@ -248,6 +252,8 @@ def served(tmp_path, options):
         "--output",
         options["output_root"],
     ]
+    if pipedream_settings is not None:
+        args.extend(["--action-mode", "pipedream", "--allow-pipedream-actions"])
     child = subprocess.Popen(
         args,
         cwd=tmp_path,

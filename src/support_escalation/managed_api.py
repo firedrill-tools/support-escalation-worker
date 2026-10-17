@@ -14,7 +14,8 @@ from fastapi.responses import JSONResponse
 from starlette.requests import ClientDisconnect
 
 from .domain import event
-from .local_runtime import run_local_event
+from .local_runtime import run_event
+from .delivery import ENV as PIPE_ENV, config as delivery_config
 from .strict import parse_json
 
 
@@ -43,6 +44,9 @@ def create_managed_app(
     output_root="artifacts/support-escalation",
     timeout_ms=120000,
     max_active=8,
+    action_mode="local",
+    pipedream=None,
+    allow_pipedream_actions=False,
 ):
     if (
         type(event_token) is not str
@@ -64,6 +68,26 @@ def create_managed_app(
     ):
         raise ValueError("explicit managed source/output and bounded deadline required")
     state = Admission(max_active)
+    if (
+        action_mode not in ("local", "pipedream")
+        or type(allow_pipedream_actions) is not bool
+    ):
+        raise ValueError("explicit action mode and permission required")
+    if action_mode == "pipedream":
+        pipe_values = (
+            {k: os.environ.get(v) for k, v in PIPE_ENV.items()}
+            if pipedream is None
+            else deepcopy(pipedream)
+        )
+        delivery_config(
+            pipe_values,
+            allow_actions=allow_pipedream_actions,
+            allow_writes=allow_writes,
+        )
+    else:
+        if pipedream is not None or allow_pipedream_actions:
+            raise ValueError("local server cannot select remote configuration")
+        pipe_values = None
     # Snapshot server configuration. Request JSON cannot choose model/credentials/destination.
     frozen = {
         "database": str(database),
@@ -75,6 +99,9 @@ def create_managed_app(
         "base_url": base_url,
         "output_root": str(output_root),
         "timeout_ms": timeout_ms,
+        "action_mode": action_mode,
+        "pipedream": pipe_values,
+        "allow_pipedream_actions": allow_pipedream_actions,
     }
 
     @asynccontextmanager
@@ -146,7 +173,7 @@ def create_managed_app(
 
             disconnect = asyncio.create_task(watch_disconnect())
             try:
-                result = await run_local_event(
+                result = await run_event(
                     **frozen, event=deepcopy(payload), stop_event=stop
                 )
                 return JSONResponse(result)

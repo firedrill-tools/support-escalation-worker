@@ -7,11 +7,20 @@ import re
 from copy import deepcopy
 from uuid import UUID
 
-from .domain import eligible, event, ticket, transition
+from .domain import (
+    CONTROL_OBSERVATION,
+    OWNED_OBSERVATION,
+    eligible,
+    event,
+    ticket,
+    transition,
+)
+from .delivery_contract import destination as validate_destination
 from .source import PROVENANCE, parse
 from .strict import canonical, digest, integer, keys, parse_json, sha256, text
 
 APPLICATION_ID = 0x46445345
+SOURCE_VERSION = 2
 MAX_DATABASE_BYTES = 64 * 1024 * 1024
 SCHEMA = {
     "metadata": "CREATE TABLE metadata (id INTEGER PRIMARY KEY CHECK(id=1), document TEXT NOT NULL) STRICT",
@@ -46,7 +55,7 @@ def hex_digest(value):
 def schema(db):
     if (
         db.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID
-        or db.execute("PRAGMA user_version").fetchone()[0] != 1
+        or db.execute("PRAGMA user_version").fetchone()[0] != SOURCE_VERSION
         or db.execute("PRAGMA page_size").fetchone()[0] != 4096
         or db.execute("PRAGMA encoding").fetchone()[0] != "UTF-8"
         or db.execute("PRAGMA journal_mode").fetchone()[0] != "delete"
@@ -113,7 +122,7 @@ def header(value, physical, instance_id=None):
     )
     if (
         type(value["schemaVersion"]) is not int
-        or value["schemaVersion"] != 1
+        or value["schemaVersion"] != SOURCE_VERSION
         or value["kind"] != "managed_synthetic_support_source"
         or value["physical_identity"] != physical
         or value["provenance"] != PROVENANCE
@@ -169,6 +178,7 @@ def check_operation(value):
             "initial_frontier",
             "allow_writes",
             "mode",
+            "destination",
             "status",
             "closed_frontier",
             "closed_observations",
@@ -185,6 +195,11 @@ def check_operation(value):
     ):
         raise ValueError("exact support operation/write/mode/status required")
     keys(value["intent"], {"event", "ticket", "context_sha256"})
+    if value["mode"] == "local":
+        if value["destination"] is not None:
+            raise ValueError("local scope cannot authorize remote destination")
+    else:
+        validate_destination(value["destination"])
     if value["status"] == "active":
         if (
             value["closed_frontier"] is not None
@@ -232,7 +247,15 @@ def permitted_action(operation, action, observation):
         if args != payload:
             raise ValueError("action differs from complete caller event intent")
     elif action["kind"] == "reserve":
-        keys(args, {"event_id", "source", "summary", "mode"})
+        keys(
+            args,
+            {"event_id", "source", "summary", "mode"}
+            | (
+                {"destination"}
+                if type(args) is dict and "destination" in args
+                else set()
+            ),
+        )
         ticket(args["source"])
         text(args["summary"], 1, 4096)
         if (
@@ -240,16 +263,18 @@ def permitted_action(operation, action, observation):
             or args["event_id"] != payload["event_id"]
             or args["mode"] != operation["mode"]
             or args["source"] != observation["value"]["ticket"]
+            or args.get("destination") != operation["destination"]
         ):
             raise ValueError(
                 "draft differs from own current read/caller notification intent"
             )
     elif action["kind"] == "notification_observation":
-        keys(args, {"event_id", "status", "response_sha256"})
+        keys(args, {"event_id", "status", "response_sha256", "observation_kind"})
         if (
             payload["kind"] != "clock_tick"
             or operation["mode"] != "pipedream"
             or args["event_id"] != payload["event_id"]
+            or args["observation_kind"] not in (OWNED_OBSERVATION, CONTROL_OBSERVATION)
         ):
             raise ValueError("notification differs from caller remote reservation")
     else:

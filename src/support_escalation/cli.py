@@ -1,27 +1,48 @@
-import argparse
-import os
-from pathlib import Path
-import uvicorn
+"""Canonical owned serving and exclusive model-free managed initialization."""
 
-from .actions import LocalActions, PipedreamActions
-from .api import create_app
-from .model import summarize
-from .service import Store, Worker
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+from .managed import ManagedSource
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Synthetic support escalation webhook")
-    parser.add_argument("--seed", action="store_true")
-    parser.add_argument("--db", default=os.getenv("ESCALATION_DB", "workspace/escalation.db"))
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8767)
-    args = parser.parse_args()
-    if args.seed:
-        print(Store.seed(args.db, Path(__file__).parents[2] / "fixtures" / "starter.json").path)
-        return
-    mode = os.getenv("ACTION_MODE", "local")
-    if mode not in ("local", "pipedream"):
-        parser.error("ACTION_MODE must be local or pipedream")
-    actions = LocalActions() if mode == "local" else PipedreamActions()
-    app = create_app(Worker(Store(args.db), summarize, actions), os.getenv("EVENT_TOKEN", ""))
-    uvicorn.run(app, host=args.host, port=args.port)
+    argv = sys.argv[1:]
+    if "--seed" not in argv:
+        from .managed_server import main as serve
+
+        return serve(argv)
+    parser = argparse.ArgumentParser(
+        description="Initialize a new managed synthetic support database"
+    )
+    parser.add_argument("--seed", action="store_true", required=True)
+    parser.add_argument(
+        "--db", default=os.environ.get("ESCALATION_DB", "workspace/escalation.db")
+    )
+    parser.add_argument("--fixture")
+    args = parser.parse_args(argv)
+    fixture = (
+        Path(args.fixture)
+        if args.fixture
+        else Path(__file__).parents[2] / "fixtures/starter.json"
+    )
+    source = ManagedSource.seed(args.db, fixture)
+    try:
+        result = {
+            "database": str(source.path),
+            "instance_id": source.instance_id,
+            "source_version": 2,
+            "initialized": True,
+        }
+    finally:
+        cleanup = source.close()
+        if not cleanup["database_closed"] or not cleanup["descriptor_closed"]:
+            raise RuntimeError("support initialization cleanup is unconfirmed")
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()

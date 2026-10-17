@@ -36,11 +36,13 @@ class OwnedServer(uvicorn.Server):
                 signal.signal(s, handler)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Owned local support escalation webhook"
+        description="Owned support escalation webhook"
     )
-    parser.add_argument("--db", required=True)
+    parser.add_argument(
+        "--db", default=os.environ.get("ESCALATION_DB", "workspace/escalation.db")
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8767)
     parser.add_argument("--allow-writes", action="store_true")
@@ -48,7 +50,17 @@ def main():
     parser.add_argument("--base-url")
     parser.add_argument("--output", default="artifacts/support-escalation")
     parser.add_argument("--timeout-ms", type=int, default=120000)
-    args = parser.parse_args()
+    parser.add_argument(
+        "--action-mode",
+        choices=("local", "pipedream"),
+        default=os.environ.get("ACTION_MODE", "local"),
+    )
+    parser.add_argument(
+        "--allow-pipedream-actions",
+        action="store_true",
+        default=os.environ.get("ALLOW_PIPEDREAM_ACTIONS") == "1",
+    )
+    args = parser.parse_args(argv)
     app = create_managed_app(
         database=args.db,
         event_token=os.environ.get("EVENT_TOKEN", ""),
@@ -57,6 +69,8 @@ def main():
         base_url=args.base_url,
         output_root=args.output,
         timeout_ms=args.timeout_ms,
+        action_mode=args.action_mode,
+        allow_pipedream_actions=args.allow_pipedream_actions,
     )
     server = OwnedServer(
         uvicorn.Config(

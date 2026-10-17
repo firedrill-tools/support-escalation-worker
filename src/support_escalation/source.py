@@ -5,7 +5,12 @@ from __future__ import annotations
 import base64
 from copy import deepcopy
 
-from .domain import initial, transition, validate as validate_business
+from .domain import (
+    HUMAN_OBSERVATION,
+    initial,
+    transition,
+    validate as validate_business,
+)
 from .strict import digest, keys, parse_json, sha256
 
 PROVENANCE = {
@@ -47,6 +52,16 @@ def validate(data):
             or step["before_sha256"] != digest(current)
         ):
             raise ValueError("support original history frontier differs")
+        keys(step["action"], {"kind", "args"})
+        if (
+            step["action"]["kind"] == "notification_observation"
+            and type(step["action"]["args"]) is dict
+            and step["action"]["args"].get("observation_kind", HUMAN_OBSERVATION)
+            != HUMAN_OBSERVATION
+        ):
+            raise ValueError(
+                "synthetic-human fixture cannot import native/control observation authority"
+            )
         after, result = transition(current, step["action"])
         if (
             after == current

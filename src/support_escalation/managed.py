@@ -14,7 +14,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import managed_state as state
-from .domain import event, transition
+from .domain import CONTROL_OBSERVATION, event, transition
+from .delivery_contract import destination as validate_destination
 from .source import PROVENANCE, parse
 from .strict import (
     MAX_BYTES,
@@ -32,6 +33,7 @@ from .strict import (
 class Credential:
     id: str
     token: str
+    authority_sha256: str | None = None
 
 
 class ManagedSource:
@@ -128,12 +130,12 @@ class ManagedSource:
             db.execute("PRAGMA synchronous=FULL")
             db.execute("PRAGMA trusted_schema=OFF")
             db.execute("PRAGMA application_id=" + str(state.APPLICATION_ID))
-            db.execute("PRAGMA user_version=1")
+            db.execute("PRAGMA user_version=" + str(state.SOURCE_VERSION))
             db.execute("BEGIN IMMEDIATE")
             for sql in state.SCHEMA.values():
                 db.execute(sql)
             header = {
-                "schemaVersion": 1,
+                "schemaVersion": state.SOURCE_VERSION,
                 "kind": "managed_synthetic_support_source",
                 "instance_id": str(uuid4()),
                 "physical_identity": physical,
@@ -220,11 +222,25 @@ class ManagedSource:
             snapshot["business"], payload, snapshot["context_sha256"]
         )
 
-    def begin(self, payload, intent, task, *, allow_writes=False, mode="local"):
+    def begin(
+        self,
+        payload,
+        intent,
+        task,
+        *,
+        allow_writes=False,
+        mode="local",
+        destination=None,
+    ):
         event(payload)
         text(task, 1, 8192)
         if type(allow_writes) is not bool or mode not in ("local", "pipedream"):
             raise ValueError("exact write permission and explicit action mode required")
+        if mode == "local":
+            if destination is not None:
+                raise ValueError("local scope cannot authorize remote destination")
+        else:
+            validate_destination(destination)
 
         def commit():
             source = self._snapshot()
@@ -251,15 +267,29 @@ class ManagedSource:
                 "initial_frontier": len(source["records"]["decisions"]),
                 "allow_writes": allow_writes,
                 "mode": mode,
+                "destination": deepcopy(destination),
                 "status": "active",
                 "closed_frontier": None,
                 "closed_observations": None,
             }
+            credential = Credential(
+                credential.id, credential.token, self._authority(operation)
+            )
             self._insert(self.database, "operations", credential.id, operation)
             self._snapshot()
             return credential
 
         return self._transaction(commit)
+
+    @staticmethod
+    def _authority(operation):
+        return digest(
+            {
+                k: v
+                for k, v in operation.items()
+                if k not in ("status", "closed_frontier", "closed_observations")
+            }
+        )
 
     @staticmethod
     def _operation(source, credential):
@@ -275,6 +305,7 @@ class ManagedSource:
             or not hmac.compare_digest(
                 operation["token_sha256"], sha256(credential.token.encode())
             )
+            or credential.authority_sha256 != ManagedSource._authority(operation)
         ):
             raise ValueError("own active support operation required")
         return operation
@@ -408,6 +439,67 @@ class ManagedSource:
             )
 
         return self._transaction(commit)
+
+    def mark_uncertain(self, credential):
+        """Only mark this owned existing remote reservation; safe before revocation."""
+
+        def commit():
+            source = self._snapshot()
+            operation = self._operation(source, credential)
+            payload = operation["intent"]["event"]
+            if (
+                operation["mode"] != "pipedream"
+                or not operation["allow_writes"]
+                or payload["kind"] != "clock_tick"
+            ):
+                return None
+            pending = next(
+                (
+                    r
+                    for r in source["business"]["outbox"]
+                    if r["event_id"] == payload["event_id"]
+                ),
+                None,
+            )
+            if pending is None or pending["status"] != "notification_started":
+                return None
+            if pending["destination"] != operation["destination"]:
+                raise ValueError(
+                    "owned pending destination differs from original caller"
+                )
+            proof = secrets.token_hex(32)
+            observation = {
+                "id": len(source["records"]["observations"]) + 1,
+                "operation_id": operation["id"],
+                "frontier": len(source["records"]["decisions"]),
+                "context_sha256": source["context_sha256"],
+                "value": state.public_read(source["business"], operation),
+                "proof_sha256": sha256(proof.encode()),
+            }
+            self._insert(self.database, "observations", observation["id"], observation)
+            action = {
+                "kind": "notification_observation",
+                "args": {
+                    "event_id": payload["event_id"],
+                    "status": "review_required",
+                    "response_sha256": None,
+                    "observation_kind": CONTROL_OBSERVATION,
+                },
+            }
+            state.permitted_action(operation, action, observation)
+            after, result = transition(source["business"], action)
+            return self._decision(
+                source,
+                action,
+                after,
+                result,
+                "applied",
+                operation["id"],
+                observation["id"],
+                "managed_caller",
+            )
+
+        return self._transaction(commit, guard=False)
 
     def close_operation(self, credential):
         """Control-only revocation bypasses cancellation and damaged business replay."""

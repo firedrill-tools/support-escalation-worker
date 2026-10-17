@@ -1,23 +1,19 @@
 # Support escalation worker
 
-A webhook worker reacts to synthetic ticket updates and explicit clock ticks. When an open ticket has an unanswered customer message older than two hours, the Anthropic Messages API drafts a brief internal escalation note. The worker rereads ticket state before delivery, so a late agent response or resolution arriving during drafting blocks the escalation. Event IDs and a durable outbox prevent repeated triggers from posting twice.
+A webhook worker handles synthetic ticket updates and explicit clock ticks. An open ticket with an unanswered customer message at least two hours old can receive an Anthropic-generated internal escalation note. The application checks current committed state before queuing or dispatching. A late reply or resolution blocks an outdated draft. Repeated triggers never automatically resend an uncertain notification.
 
-## Run locally
+## Run
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
-
-```sh
-uv sync --group dev
-uv run support-escalation --seed
-```
-
-Set `EVENT_TOKEN`, `ANTHROPIC_API_KEY` and an enabled `ANTHROPIC_MODEL`, then start the local worker:
+Requires Python3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv run support-escalation
+uv sync --locked --group dev
+uv run --locked support-escalation --seed --db workspace/escalation.db
+# Configure EVENT_TOKEN, ANTHROPIC_API_KEY and an explicitly enabled ANTHROPIC_MODEL.
+uv run --locked support-escalation --db workspace/escalation.db --allow-writes
 ```
 
-Send a synthetic clock event with an explicit time:
+Without `--allow-writes`, an eligible clock can produce a retained model preview without a business event or queue effect. Local success is `local_queued`; it does not claim external delivery. Initialization is model-free and exclusive, closes its database/descriptor before success and refuses to overwrite an existing path. Managed source format2adds complete destination and live caller-authority binding; older database formats reject without migration or repair. Preserve an old source/evidence and initialize a separate new path.
 
 ```sh
 curl -sS -X POST http://127.0.0.1:8767/events \
@@ -25,40 +21,50 @@ curl -sS -X POST http://127.0.0.1:8767/events \
   --data '{"event_id":"EV-501","ticket_id":"T-501","kind":"clock_tick","occurred_at":"2026-10-15T12:30:00Z"}'
 ```
 
-The fixture includes an unanswered open ticket, a resolved ticket, a ticket with an agent reply, and a recent request. The `clock_tick` event is the cooperative time seam: changing its timestamp does not run a background worker. `agent_reply`, `customer_reply` and `resolved` events update ticket state. The default `ACTION_MODE=local` writes to the SQLite outbox without calling a real service. Reset by creating a new database path; the seed command refuses to overwrite one.
+Set EVENT_TOKEN to the header value used by your caller. Exact event fields are event_id, ticket_id, kind and occurred_at. Kinds are clock_tick, agent_reply, customer_reply and resolved. Timestamps are canonical UTC seconds. A clock is explicit application input; it does not advance wall time or start a background ticket timer. Subtraction handles the exact two-hour and final-calendar boundaries safely. A ticket has at most one escalation; later replies are retained without reopening its earlier notification. Event IDs cannot be reused with changed payloads.
 
-## Pipedream Connect boundary
-
-`ACTION_MODE=pipedream` plus `ALLOW_PIPEDREAM_ACTIONS=1` and all `PIPEDREAM_*` settings in `.env.example` selects the Pipedream development project action for a connected test Slack account. The adapter calls `slack_v2-post-message`; its account-specific authorization, channel configuration and returned payload still need live qualification. A failed or timed-out remote notification is marked `review_required` and is not automatically sent again. The app does not silently fall back to local delivery. The local action path is an application-side substitute, not interception of hosted Pipedream execution.
-
-`uv run --group dev pytest` covers duplicate and conflicting IDs, explicit clock behavior, late replies, already resolved tickets, model failure retry before notification, remote uncertainty, token authentication and the Pipedream enablement gate. These are offline state and HTTP proofs. No live Claude, Pipedream, Slack or Firedrill call has been verified. This private repository has no license pending portfolio publication decisions.
-
-Explore related applications in the [Firedrill example catalog](https://github.com/firedrill-tools/firedrill-example-catalog). Product and setup references: [Firedrill](https://firedrill.run/) and the [official developer documentation](https://docs.firedrill.run/). Use documentation matching the qualified release; this repository records its current integration limits above.
-
-## Owned local event runtime
-
-The new managed local entry point uses actual Anthropic1.14.0with its public httpx2client, one owned native transport and the managed current-source boundary. The original injected Store/Worker/API functions remain trusted synthetic-human compatibility seams. The original serving command and Pipedream path are still being integrated into the owned lifecycle; they are not qualified by the new local checks.
+## Pipedream development mode
 
 ```sh
-uv run --locked support-escalation-state init --db workspace/managed.db --fixture fixtures/starter.json
-# Set ANTHROPIC_API_KEY and an explicitly enabled ANTHROPIC_MODEL first.
-uv run --locked support-escalation-local --db workspace/managed.db --allow-writes \
-  --event-json '{"event_id":"EV-OWNED-1","ticket_id":"T-501","kind":"clock_tick","occurred_at":"2026-10-15T12:30:00Z"}'
+uv run --locked support-escalation --db workspace/escalation.db --allow-writes \
+  --action-mode pipedream --allow-pipedream-actions
 ```
 
-Without `--allow-writes`, an eligible event can produce a retained model preview with no business event or queue effect. Local success means `local_queued`, with external delivery unknown. Repeated recorded events are inspected without replaying the model or notification. A prior incomplete clock or started remote notification returns review_required. Late replies/resolution invalidate old draft reads; current reinspection blocks the old queue.
+Supply the development project, external user, connected Slack auth provision and explicit channel ID in `.env.example`. Choose either PIPEDREAM_ACCESS_TOKEN or the client ID/secret pair. The application snapshots these settings and binds their complete destination and credential fingerprint to the caller operation. Production environment settings, ambiguous credentials, missing permissions and malformed targets refuse before source/model allocation. ACTION_MODE and ALLOW_PIPEDREAM_ACTIONS remain recognized explicit server environment settings. Request JSON and model text cannot select the account, channel, endpoint, credentials or write permission.
 
-Private0700/0600receipts are prepared before keys/resources. They retain original SQL images, complete original request/response bytes/unknown fields, exact original versus SDK completion/usage, real read/decision acknowledgements and final valid/unknown business. An explicit original assistant end_turn with bounded nonempty text must pass before SDK parsing and queuing. max_tokens/null/missing/pause_turn/tool_use refuse before the queue while preserving the earlier recorded clock. One prepared native request,256output tokens,2MiBrequest/1MiBresponse,30second HTTP phase, shared bounded deadline and zero retries are explicit. No default live model is selected; an explicit base origin is supported, and ambient ANTHROPIC_BASE_URL is not inherited. Ambient custom SDK headers are refused.
+Dispatch uses actual public AsyncPipedream2.1.20with its owned HTTPX0.28.1client, development mode, zero SDK/transport retries and no redirects. It allows one OAuth request and one action request. OAuth credential bodies are withheld from evidence; original hashes, explicitly redacted fields and unknown metadata remain. Known secrets never enter the model. The action is slack_v2-post-message. An original HTTP200return must contain exact boolean ret.ok=true, the selected channel and a message timestamp before SDK normalization. Remote success is `remote_acknowledged`, with actual delivery unknown. HTTP success alone, ret.false, empty/error data, a different channel or incomplete body cannot become delivery.
 
-Caller/parent/deadline, direct task cancellation and actual SIGINT/SIGTERM/SIGHUP close the durable scope before cancelling/draining owned HTTP. Final cleanup is shielded and closes provider/database/descriptor once. Actual control failure remains unconfirmed; earlier source effects are retained. All116current checks pass, including44normal actual local SDK/HTTP/CLI/lifecycle checks. Original malformed/partial/status/usage, current source damage, recording loss, failed one-attempt closes and lock after the queue are exercised without automatic repair or retry. The owned webhook/Pipedream route,12coherent private populations and fresh full/production package qualification remain active. Controlled local HTTP is not live Claude, Pipedream, Slack or Firedrill proof.
+Cancellation or failure after reservation marks the existing notification review_required before scope revocation where current source permits. Corrupt source/locks remain unknown or unconfirmed. There is no automatic resend, local fallback or rollback claim after an earlier effect. Another event ID also cannot bypass an existing ticket escalation. Real account permissions, action-component behavior and Slack delivery still require separately authorized live qualification.
 
-## Owned local webhook
+## Source and invocation boundaries
+
+The normal run_event/canonical CLI/managed webhook share actual SQLite and native SDK ownership. The local-only run_local_event/support-escalation-local entry point cannot dispatch externally. The original injected Store/Worker/create_app and PipedreamActions functions remain explicit synthetic-human compatibility seams; normal serving no longer calls them.
 
 ```sh
-# Use the managed source initialized above; set EVENT_TOKEN explicitly.
-uv run --locked support-escalation-managed --db workspace/managed.db --allow-writes
+uv run --locked support-escalation-state init --db workspace/other.db --fixture fixtures/starter.json
+uv run --locked support-escalation-state inspect --db workspace/other.db
+uv run --locked support-escalation-local --db workspace/other.db --allow-writes \
+  --event-json '{"event_id":"EV-LOCAL","ticket_id":"T-501","kind":"clock_tick","occurred_at":"2026-10-15T12:30:00Z"}'
 ```
 
-This new local serving entry point snapshots server model/key/origin/write settings, authenticates each event with the configured token and accepts only the exact original event JSON. Body reading is bounded to64KiB/five seconds and admission to at most eight active requests. Caller reply/resolution updates use a separate explicit event boundary and can commit while a model clock operation is active. Their complete current caller intent is checked inside the transaction. A duplicate incomplete clock requires review and never reruns a model or notification; a durable active marker alone does not establish live execution.
+Private state commands are model-free and grant no runtime capability. Mutable source is bounded, regular, unshared and nonsymlink. Exact SQL schema/header/UUID/physical identity, original fixture, complete human history and current observation/decision replay are validated without repair. A live private credential also pins its original full caller intent, task, mode, destination and write permission. Source records cannot silently promote its authority. Each mutation needs a genuine own current unused read. Historical synthetic fixtures cannot import native/control observations or runtime capabilities. Current replies/resolution invalidate old draft reads.
 
-Service stop closes admission and sets each active request's cancellation event before drain. The actual Uvicorn0.54server uses public signal/lifecycle methods to handle SIGINT/SIGTERM/SIGHUP, restore previous handlers and await owned cleanup. Source precommit guards also observe cancellation directly. All124checks pass, including actual ASGI authentication/JSON/body/admission/concurrent-update paths and real served CLI HTTP/model traffic plus all three signals outside checkout. These new local commands are qualified separately from the original legacy serving/Pipedream path, which is being replaced next.
+The webhook verifies its caller token before body/source/model, accepts exact original duplicate-aware/fatalUTF8JSON, bounds body reading to64KiB/five seconds and limits admission to at most eight requests. Explicit incoming replies can commit through their separate current-intent boundary while a clock is drafting. Repeated incomplete state stays review_required; a durable active marker is not proof of live execution. GET/health reports admission and active requests without opening the source or calling a model.
+
+## Evidence and cleanup
+
+Private0700/0600receipts retain original SQL images, original model HTTP bytes/unknown fields, original versus SDK counters/normalization, actual source acknowledgements and original remote observations. Billing and actual external delivery remain unknown. A complete original Anthropic assistant end_turn/text/content/identity gate runs before SDK parsing or queuing. There is one prepared model request,256output tokens,2MiBrequest/1MiBresponse,30second HTTP phase and a shared10..300000millisecond deadline, with no retries or model fallback. Configure a model explicitly; a dependency pin does not enable one. ANTHROPIC_BASE_URL is not inherited, and ambient custom SDK headers are refused.
+
+Caller/parent/deadline, direct task cancellation and actual CLI/server SIGINT/SIGTERM/SIGHUP revoke authority before cancelling/draining HTTP. Cleanup is shielded. Actual clients/transports/database/descriptors close once; a failed acknowledgement remains unconfirmed even if the resource closed. Earlier queues/remote acknowledgements survive later close or recording failure. Recording loss retains memory evidence and the last durable file, without recreating the missing receipt root. This is a cooperative application boundary, not an OS or distributed exactly-once guarantee.
+
+## Verification and remaining work
+
+```sh
+uv run --locked --group dev pytest -q
+```
+
+All150current checks pass: original compatibility flows, strict source/history, actual managed SQL/current authority, actual Anthropic and Pipedream SDK/HTTP/OAuth, normal CLI/ASGI/served webhook, all signals/cancellation, current events, original response faults, uncertainty/no-replay, failed closes, writer locks and recording loss after effects. The canonical served remote path and termination during an action are exercised outside checkout. Controlled HTTP uses synthetic keys and owned servers; it is not live model, Pipedream, Slack or Firedrill proof.
+
+Next are12coherent private starter/busy/ambiguous/boundary populations with preserving separate resets, then fresh wheel/sdist/complete/production-only package qualification and exact Linux/downloaded source equality. No independent completion claim is made before those gates. Live provider/account/budget/semantic and billing review, new Firedrill qualification and publication/license remain parked. This private repository has no selected public license.
+
+See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). The retired product is not an integration target. Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).

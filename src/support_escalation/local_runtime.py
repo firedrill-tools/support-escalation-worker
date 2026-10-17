@@ -1,4 +1,4 @@
-"""Owned normal local queue workflow using actual Anthropic SDK and managed source."""
+"""Owned normal event workflow: local queue or explicitly authorized Pipedream."""
 
 from __future__ import annotations
 
@@ -8,15 +8,14 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .domain import event
+from .domain import OWNED_OBSERVATION, event
+from .delivery import Delivery, config as delivery_config
 from .evidence import Receipt, error_info
 from .managed import ManagedSource
 from .native import Native, config
 from .strict import canonical, parse_json
 
-TASK = (
-    "Evaluate this caller ticket event and prepare a needed local internal escalation."
-)
+TASK = "Evaluate this exact caller ticket event and prepare a needed internal escalation through the selected authorized mode."
 
 
 class Run:
@@ -26,6 +25,9 @@ class Run:
         self.source = None
         self.scope = None
         self.native = None
+        self.delivery = None
+        self.delivery_read = None
+        self.mode = "local"
         self.job = None
         self.failure = None
         self.closing = False
@@ -70,6 +72,29 @@ class Run:
             self.scope_closed = True
             return
         self.scope_close_attempted = True
+        if self.mode == "pipedream":
+            try:
+                uncertain = self.source.mark_uncertain(self.scope)
+                if uncertain is not None:
+                    self.receipt.data["acknowledged_decisions"].append(
+                        deepcopy(uncertain)
+                    )
+                    if uncertain["decision"]["status"] == "applied":
+                        self.receipt.data["acknowledged_effects"].append(
+                            deepcopy(uncertain)
+                        )
+                    self.receipt.data["actions"].append(
+                        {
+                            "kind": "owned_uncertainty_before_revocation",
+                            "result": deepcopy(uncertain),
+                            "source": self.receipt.source(self.source.snapshot()),
+                        }
+                    )
+                    if self.receipt.error is None:
+                        self.save()
+            except BaseException as error:
+                self.receipt.data["uncertainty_record_error"] = error_info(error)
+                self.fail(error)
         try:
             result = self.source.close_operation(self.scope)
             self.scope_closed = result["closed"]
@@ -106,6 +131,39 @@ class Run:
         )
         self.save()
         return read
+
+    def delivery_check(self, delivery):
+        self.check()
+        if (
+            self.mode != "pipedream"
+            or self.delivery is not delivery
+            or self.delivery_read is None
+        ):
+            raise ValueError("owned current Pipedream reservation required")
+        source = self.source.snapshot()
+        operation = self.source._operation(source, self.scope)
+        target = delivery.config.destination()
+        pending = next(
+            (
+                r
+                for r in source["business"]["outbox"]
+                if r["event_id"] == operation["intent"]["event"]["event_id"]
+            ),
+            None,
+        )
+        if (
+            operation["destination"] != target
+            or pending is None
+            or pending["destination"] != target
+            or pending["status"] != "notification_started"
+            or source["context_sha256"]
+            != self.delivery_read["observation"]["context_sha256"]
+        ):
+            raise ValueError("current source/destination changed before notification")
+        if self.delivery_read["value"]["ticket"] != next(
+            r for r in source["business"]["tickets"] if r["id"] == pending["ticket_id"]
+        ):
+            raise ValueError("selected ticket changed before notification")
 
     def apply(self, action, read):
         self.check()
@@ -154,12 +212,15 @@ def observed(source, payload):
         "outbox": deepcopy(outbox),
         "local_queue_complete": outbox is not None
         and outbox["status"] == "local_queued",
+        "notification_state": outbox["status"] if outbox is not None else None,
+        "workflow_complete": outbox is not None
+        and outbox["status"] in ("local_queued", "remote_acknowledged"),
         "actual_external_delivery": None,
     }
 
 
-async def run_local_event(**options):
-    """Local queue mode; remote Pipedream dispatch is a separate explicit adapter."""
+async def run_event(**options):
+    """Actual owned event execution; external dispatch requires separate explicit gates."""
     allowed = {
         "database",
         "event",
@@ -172,6 +233,9 @@ async def run_local_event(**options):
         "timeout_ms",
         "stop_event",
         "parent_event",
+        "action_mode",
+        "pipedream",
+        "allow_pipedream_actions",
     }
     payload = deepcopy(options.get("event"))
     intent = deepcopy(options.get("intent"))
@@ -180,6 +244,9 @@ async def run_local_event(**options):
     model = options.get("model")
     base_url = options.get("base_url")
     database = options.get("database")
+    mode = options.get("action_mode", "local")
+    pipe_settings = deepcopy(options.get("pipedream"))
+    pipe_allowed = options.get("allow_pipedream_actions", False)
     timeout_ms = options.get("timeout_ms", 120000)
     signals = [options.get("stop_event"), options.get("parent_event")]
     receipt = None
@@ -192,7 +259,12 @@ async def run_local_event(**options):
         receipt = Receipt(
             options.get("output_root") or "artifacts/support-escalation",
             {
-                "execution": "actual_Anthropic_SDK_owned_HTTP_local_queue",
+                "execution": (
+                    "actual_owned_Anthropic_Pipedream"
+                    if mode == "pipedream"
+                    else "actual_Anthropic_SDK_owned_HTTP_local_queue"
+                ),
+                "action_mode": mode if type(mode) is str else None,
                 "caller_event": payload if type(payload) is dict else None,
                 "allow_writes": writes if type(writes) is bool else None,
                 "allocation": {"source": False, "scope": False, "provider": False},
@@ -205,6 +277,11 @@ async def run_local_event(**options):
         if type(timeout_ms) is not int or not 10 <= timeout_ms <= 300000:
             raise ValueError("bounded exact support timeout_ms10..300000 required")
         owner = Run(receipt, timeout_ms)
+        if mode not in ("local", "pipedream") or type(pipe_allowed) is not bool:
+            raise ValueError(
+                "explicit local or Pipedream mode and action permission required"
+            )
+        owner.mode = mode
         if set(options) - allowed:
             raise ValueError(
                 "unsupported support runtime options: "
@@ -223,6 +300,24 @@ async def run_local_event(**options):
             if signal is not None and signal.is_set():
                 raise RuntimeError("support caller already cancelled")
         owner.stop_events = [signal for signal in signals if signal is not None]
+        pipe_config = (
+            delivery_config(
+                pipe_settings, allow_actions=pipe_allowed, allow_writes=writes
+            )
+            if mode == "pipedream"
+            else None
+        )
+        if mode == "local" and (pipe_settings is not None or pipe_allowed):
+            raise ValueError("local mode cannot accept remote action configuration")
+        if pipe_config is not None:
+            receipt.data["delivery_configuration"] = {
+                "destination": pipe_config.destination(),
+                "action_permission": True,
+                "sdk_max_retries": 0,
+                "oauth_request_limit": 1,
+                "action_request_limit": 1,
+                "actual_delivery": None,
+            }
         configuration = (
             config(api_key, model, base_url)
             if payload["kind"] == "clock_tick"
@@ -276,7 +371,8 @@ async def run_local_event(**options):
             outcome = {
                 "status": (
                     "review_required"
-                    if prior["status"] in ("eligible", "notification_started")
+                    if prior["status"]
+                    in ("eligible", "notification_started", "review_required")
                     else "already_recorded"
                 ),
                 "prior_status": prior["status"],
@@ -304,7 +400,14 @@ async def run_local_event(**options):
         else:
             current_intent = owner.source.intent(payload) if intent is None else intent
             owner.scope = owner.source.begin(
-                payload, current_intent, TASK, allow_writes=writes, mode="local"
+                payload,
+                current_intent,
+                TASK,
+                allow_writes=writes,
+                mode=mode,
+                destination=(
+                    pipe_config.destination() if pipe_config is not None else None
+                ),
             )
             receipt.data["allocation"]["scope"] = True
             first = owner.observe()
@@ -331,6 +434,26 @@ async def run_local_event(**options):
                 summary = await asyncio.shield(owner.job)
                 owner.flow_drained = True
                 owner.check()
+                if pipe_config is not None:
+                    try:
+                        owner.delivery = Delivery(
+                            owner,
+                            pipe_config,
+                            payload["event_id"],
+                            payload["ticket_id"],
+                            summary,
+                        )
+                    except BaseException as error:
+                        owner.delivery = getattr(error, "delivery_owner", None)
+                        receipt.data["delivery_allocated"] = (
+                            owner.delivery is not None
+                            and (
+                                owner.delivery.transport is not None
+                                or owner.delivery.http is not None
+                            )
+                        )
+                        raise
+                    receipt.data["delivery_allocated"] = True
                 try:
                     outcome = owner.apply(
                         {
@@ -339,7 +462,12 @@ async def run_local_event(**options):
                                 "event_id": payload["event_id"],
                                 "source": current["value"]["ticket"],
                                 "summary": summary,
-                                "mode": "local",
+                                "mode": mode,
+                                "destination": (
+                                    pipe_config.destination()
+                                    if pipe_config is not None
+                                    else None
+                                ),
                             },
                         },
                         current,
@@ -360,7 +488,12 @@ async def run_local_event(**options):
                                 "event_id": payload["event_id"],
                                 "source": reinspection["value"]["ticket"],
                                 "summary": summary,
-                                "mode": "local",
+                                "mode": mode,
+                                "destination": (
+                                    pipe_config.destination()
+                                    if pipe_config is not None
+                                    else None
+                                ),
                             },
                         },
                         reinspection,
@@ -371,7 +504,26 @@ async def run_local_event(**options):
                             "context_sha256"
                         ],
                     }
-                owner.observe()
+                owner.delivery_read = owner.observe()
+                if mode == "pipedream" and outcome["status"] == "notification_started":
+                    owner.job = asyncio.create_task(owner.delivery.notify())
+                    owner.flow_drained = False
+                    remote = await asyncio.shield(owner.job)
+                    owner.flow_drained = True
+                    owner.delivery_check(owner.delivery)
+                    outcome = owner.apply(
+                        {
+                            "kind": "notification_observation",
+                            "args": {
+                                "event_id": payload["event_id"],
+                                "status": "remote_acknowledged",
+                                "response_sha256": remote["response_sha256"],
+                                "observation_kind": OWNED_OBSERVATION,
+                            },
+                        },
+                        owner.delivery_read,
+                    )
+                    owner.observe()
     except BaseException as error:
         if receipt is None:
             receipt = getattr(error, "receipt", None)
@@ -401,6 +553,22 @@ async def run_local_event(**options):
                     await asyncio.gather(owner.job, return_exceptions=True)
                     owner.flow_drained = True
                 provider_close_confirmed = owner.native is None
+                delivery_close_confirmed = owner.delivery is None
+                if owner.delivery is not None:
+                    try:
+                        await owner.delivery.close()
+                        delivery_close_confirmed = owner.delivery.closed
+                    except BaseException as error:
+                        owner.fail(error)
+                        receipt.data["delivery_close_error"] = error_info(error)
+                    receipt.data["delivery_state"] = {
+                        "oauth_prepared": owner.delivery.oauth_prepared,
+                        "action_prepared": owner.delivery.action_prepared,
+                        "action_attempted": owner.delivery.action_attempted,
+                        "original_action_acknowledged": owner.delivery.observation
+                        is not None,
+                        "actual_delivery": None,
+                    }
                 if owner.native is not None:
                     try:
                         await owner.native.close()
@@ -458,12 +626,22 @@ async def run_local_event(**options):
                     ),
                     "provider_close_confirmed": provider_close_confirmed,
                     "source_close_confirmed": source_close_confirmed,
+                    "delivery_close_attempted": (
+                        owner.delivery.close_attempted
+                        if owner.delivery is not None
+                        else False
+                    ),
+                    "delivery_closed": (
+                        owner.delivery.closed if owner.delivery is not None else True
+                    ),
+                    "delivery_close_confirmed": delivery_close_confirmed,
                     "source": cleanup,
                 }
                 receipt.data["cleanup_confirmed"] = (
                     owner.scope_closed
                     and owner.flow_drained
                     and provider_close_confirmed
+                    and delivery_close_confirmed
                     and source_close_confirmed
                     and (
                         cleanup is None
@@ -542,3 +720,10 @@ async def run_local_event(**options):
             raise error from original
         raise error
     return receipt.data["result"]
+
+
+async def run_local_event(**options):
+    """The local entry point can never select an external action mode."""
+    if options.get("action_mode", "local") != "local":
+        raise ValueError("local event entry point cannot dispatch external actions")
+    return await run_event(**{**options, "action_mode": "local"})

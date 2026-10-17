@@ -6,6 +6,12 @@ from copy import deepcopy
 import re
 
 from .strict import digest, identifier, instant, integer, keys, next_revision, text
+from .delivery_contract import destination as validate_destination
+
+HUMAN_OBSERVATION = "explicit_synthetic_human_action_observation"
+OWNED_OBSERVATION = "owned_sdk_action_observation"
+CONTROL_OBSERVATION = "control_uncertainty_observation"
+ACK_KINDS = (HUMAN_OBSERVATION, OWNED_OBSERVATION, CONTROL_OBSERVATION)
 
 BASE_FIELDS = {
     "id",
@@ -121,6 +127,7 @@ def validate(value):
                 "mode",
                 "status",
                 "acknowledgement",
+                "destination",
             },
         )
         source = ticket(row["source"])
@@ -142,9 +149,15 @@ def validate(value):
         ):
             raise ValueError("unsupported original support outbox snapshot")
         if row["mode"] == "local":
-            if row["status"] != "local_queued" or row["acknowledgement"] is not None:
+            if (
+                row["status"] != "local_queued"
+                or row["acknowledgement"] is not None
+                or row["destination"] is not None
+            ):
                 raise ValueError("local queue cannot claim remote delivery")
         elif row["mode"] == "pipedream":
+            if row["destination"] is not None:
+                validate_destination(row["destination"])
             if row["status"] not in (
                 "notification_started",
                 "remote_acknowledged",
@@ -162,8 +175,7 @@ def validate(value):
                     {"kind", "response_sha256", "actual_delivery"},
                 )
                 if (
-                    row["acknowledgement"]["kind"]
-                    != "explicit_synthetic_human_action_observation"
+                    row["acknowledgement"]["kind"] not in ACK_KINDS
                     or row["acknowledgement"]["actual_delivery"] is not None
                     or (
                         row["acknowledgement"]["response_sha256"] is not None
@@ -177,6 +189,19 @@ def validate(value):
                     )
                 ):
                     raise ValueError("remote delivery remains unverified")
+                if row["acknowledgement"]["kind"] == OWNED_OBSERVATION and (
+                    row["status"] != "remote_acknowledged"
+                    or row["destination"] is None
+                    or row["acknowledgement"]["response_sha256"] is None
+                ):
+                    raise ValueError(
+                        "owned action acknowledgement needs its exact destination and original response"
+                    )
+                if (
+                    row["acknowledgement"]["kind"] == CONTROL_OBSERVATION
+                    and row["status"] != "review_required"
+                ):
+                    raise ValueError("control observation can only record uncertainty")
         else:
             raise ValueError("explicit local or pipedream mode required")
         delivered.add(row["ticket_id"])
@@ -273,7 +298,20 @@ def transition(business, action):
             }
         )
     elif action["kind"] == "reserve":
-        keys(args, {"event_id", "source", "summary", "mode"})
+        keys(
+            args,
+            {"event_id", "source", "summary", "mode"}
+            | (
+                {"destination"}
+                if type(args) is dict and "destination" in args
+                else set()
+            ),
+        )
+        target = args.get("destination")
+        if target is not None:
+            validate_destination(target)
+        if args["mode"] == "local" and target is not None:
+            raise ValueError("local queue cannot select remote destination")
         identifier(args["event_id"], 100)
         ticket(args["source"])
         text(args["summary"], 1, 4096)
@@ -315,13 +353,25 @@ def transition(business, action):
                     "mode": args["mode"],
                     "status": status,
                     "acknowledgement": None,
+                    "destination": deepcopy(target),
                 }
             )
             row["escalated_at"], row["revision"] = payload["occurred_at"], revision
             result = {"status": status, "ticket_id": row["id"]}
         entry["status"], entry["result"] = result["status"], deepcopy(result)
     elif action["kind"] == "notification_observation":
-        keys(args, {"event_id", "status", "response_sha256"})
+        keys(
+            args,
+            {"event_id", "status", "response_sha256"}
+            | (
+                {"observation_kind"}
+                if type(args) is dict and "observation_kind" in args
+                else set()
+            ),
+        )
+        observation_kind = args.get("observation_kind", HUMAN_OBSERVATION)
+        if observation_kind not in ACK_KINDS:
+            raise ValueError("declared action observation provenance required")
         identifier(args["event_id"], 100)
         if args["status"] not in ("remote_acknowledged", "review_required"):
             raise ValueError("explicit remote acknowledgement or uncertainty required")
@@ -334,7 +384,7 @@ def transition(business, action):
             raise ValueError("remote notification must never replay")
         row["status"] = args["status"]
         row["acknowledgement"] = {
-            "kind": "explicit_synthetic_human_action_observation",
+            "kind": observation_kind,
             "response_sha256": args["response_sha256"],
             "actual_delivery": None,
         }

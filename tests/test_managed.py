@@ -85,6 +85,27 @@ def test_actual_scoped_registration_current_read_atomic_local_queue_and_close(tm
         assert len(final["records"]["decisions"]) == 2
 
 
+def test_live_credential_pins_complete_original_permission_and_caller_authority(
+    tmp_path,
+):
+    with seeded(tmp_path) as source:
+        scope = begin(source, writes=False)
+        operation = json.loads(
+            source.database.execute("SELECT document FROM operations").fetchone()[0]
+        )
+        operation["allow_writes"] = True
+        source.database.execute(
+            "UPDATE operations SET document=?", (canonical(operation),)
+        )
+        # This is otherwise a self-consistent empty source. The live credential
+        # still owns its original readonly caller authority.
+        assert source.snapshot()["business"]["events"] == []
+        with pytest.raises(ValueError, match="own active"):
+            source.observe(scope)
+        assert source.close_operation(scope)["closed"]
+        assert source.snapshot()["records"]["observations"] == []
+
+
 @pytest.mark.parametrize(
     "fault",
     [
