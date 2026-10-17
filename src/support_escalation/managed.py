@@ -385,11 +385,15 @@ class ManagedSource:
             "result": deepcopy(result),
         }
 
-    def event(self, payload):
+    def event(self, payload, *, intent=None):
         event(payload)
 
         def commit():
             source = self._snapshot()
+            if intent is not None and intent != state.caller_intent(
+                source["business"], payload, source["context_sha256"]
+            ):
+                raise ValueError("complete current caller update intent required")
             action = {"kind": "event", "args": deepcopy(payload)}
             after, result = transition(source["business"], action)
             return self._decision(

@@ -33,6 +33,7 @@ class Run:
         self.scope_closed = False
         self.flow_drained = True
         self.source_attempted = False
+        self.stop_events = []
 
     def fail(self, error):
         if self.failure is None:
@@ -50,6 +51,8 @@ class Run:
             raise self.failure
         if self.closing:
             raise RuntimeError("support operation is closing")
+        if any(event.is_set() for event in self.stop_events):
+            raise RuntimeError("support cancellation requested")
         if time.monotonic() >= self.deadline:
             raise TimeoutError("support shared deadline exceeded")
         if self.receipt.error is not None:
@@ -219,6 +222,7 @@ async def run_local_event(**options):
                 raise ValueError("actual asyncio cancellation Event required")
             if signal is not None and signal.is_set():
                 raise RuntimeError("support caller already cancelled")
+        owner.stop_events = [signal for signal in signals if signal is not None]
         configuration = (
             config(api_key, model, base_url)
             if payload["kind"] == "clock_tick"
@@ -278,6 +282,25 @@ async def run_local_event(**options):
                 "prior_status": prior["status"],
                 "reason": "original event is preserved and no model or notification is replayed",
             }
+        elif payload["kind"] != "clock_tick":
+            current_intent = owner.source.intent(payload) if intent is None else intent
+            if writes:
+                owner.check()
+                decision = owner.source.event(payload, intent=current_intent)
+                receipt.data["acknowledged_decisions"].append(deepcopy(decision))
+                if decision["decision"]["status"] == "applied":
+                    receipt.data["acknowledged_effects"].append(deepcopy(decision))
+                receipt.data["actions"].append(
+                    {
+                        "kind": "explicit_caller_update",
+                        "decision": deepcopy(decision),
+                        "source": receipt.source(owner.source.snapshot()),
+                    }
+                )
+                owner.save()
+                outcome = decision["result"]
+            else:
+                outcome = {"status": "write_permission_required"}
         else:
             current_intent = owner.source.intent(payload) if intent is None else intent
             owner.scope = owner.source.begin(
