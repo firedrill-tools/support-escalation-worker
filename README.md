@@ -34,3 +34,20 @@ The fixture includes an unanswered open ticket, a resolved ticket, a ticket with
 `uv run --group dev pytest` covers duplicate and conflicting IDs, explicit clock behavior, late replies, already resolved tickets, model failure retry before notification, remote uncertainty, token authentication and the Pipedream enablement gate. These are offline state and HTTP proofs. No live Claude, Pipedream, Slack or Firedrill call has been verified. This private repository has no license pending portfolio publication decisions.
 
 Explore related applications in the [Firedrill example catalog](https://github.com/firedrill-tools/firedrill-example-catalog). Product and setup references: [Firedrill](https://firedrill.run/) and the [official developer documentation](https://docs.firedrill.run/). Use documentation matching the qualified release; this repository records its current integration limits above.
+
+## Owned local event runtime
+
+The new managed local entry point uses actual Anthropic1.14.0with its public httpx2client, one owned native transport and the managed current-source boundary. The original injected Store/Worker/API functions remain trusted synthetic-human compatibility seams. The original serving command and Pipedream path are still being integrated into the owned lifecycle; they are not qualified by the new local checks.
+
+```sh
+uv run --locked support-escalation-state init --db workspace/managed.db --fixture fixtures/starter.json
+# Set ANTHROPIC_API_KEY and an explicitly enabled ANTHROPIC_MODEL first.
+uv run --locked support-escalation-local --db workspace/managed.db --allow-writes \
+  --event-json '{"event_id":"EV-OWNED-1","ticket_id":"T-501","kind":"clock_tick","occurred_at":"2026-10-15T12:30:00Z"}'
+```
+
+Without `--allow-writes`, an eligible event can produce a retained model preview with no business event or queue effect. Local success means `local_queued`, with external delivery unknown. Repeated recorded events are inspected without replaying the model or notification. A prior incomplete clock or started remote notification returns review_required. Late replies/resolution invalidate old draft reads; current reinspection blocks the old queue.
+
+Private0700/0600receipts are prepared before keys/resources. They retain original SQL images, complete original request/response bytes/unknown fields, exact original versus SDK completion/usage, real read/decision acknowledgements and final valid/unknown business. An explicit original assistant end_turn with bounded nonempty text must pass before SDK parsing and queuing. max_tokens/null/missing/pause_turn/tool_use refuse before the queue while preserving the earlier recorded clock. One prepared native request,256output tokens,2MiBrequest/1MiBresponse,30second HTTP phase, shared bounded deadline and zero retries are explicit. No default live model is selected; an explicit base origin is supported, and ambient ANTHROPIC_BASE_URL is not inherited. Ambient custom SDK headers are refused.
+
+Caller/parent/deadline, direct task cancellation and actual SIGINT/SIGTERM/SIGHUP close the durable scope before cancelling/draining owned HTTP. Final cleanup is shielded and closes provider/database/descriptor once. Actual control failure remains unconfirmed; earlier source effects are retained. All91current checks pass, including19normal actual local SDK/HTTP/CLI/lifecycle checks. The remaining original-response/storage/failed-close cases, owned webhook/Pipedream route,12coherent private populations and fresh full/production package qualification remain active. Controlled local HTTP is not live Claude, Pipedream, Slack or Firedrill proof.

@@ -514,6 +514,8 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "httpx2" },
     { name = "pipedream" },
     { name = "pydantic" },
     { name = "uvicorn" },
@@ -527,10 +529,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=1,<2" },
+    { name = "anthropic", specifier = "==1.14.0" },
     { name = "fastapi", specifier = "==0.143.2" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "httpx2", specifier = "==2.13.1" },
     { name = "pipedream", specifier = "==2.1.20" },
-    { name = "pydantic", specifier = ">=2.12,<3" },
+    { name = "pydantic", specifier = "==2.14.1" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
 
