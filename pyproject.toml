@@ -11,6 +11,7 @@ dependencies = ["anthropic>=1,<2", "pipedream==2.1.20", "fastapi==0.143.2", "uvi
 
 [project.scripts]
 support-escalation = "support_escalation.cli:main"
+support-escalation-state = "support_escalation.managed_cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
