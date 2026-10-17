@@ -57,14 +57,32 @@ Private0700/0600receipts retain original SQL images, original model HTTP bytes/u
 
 Caller/parent/deadline, direct task cancellation and actual CLI/server SIGINT/SIGTERM/SIGHUP revoke authority before cancelling/draining HTTP. Cleanup is shielded. Actual clients/transports/database/descriptors close once; a failed acknowledgement remains unconfirmed even if the resource closed. Earlier queues/remote acknowledgements survive later close or recording failure. Recording loss retains memory evidence and the last durable file, without recreating the missing receipt root. This is a cooperative application boundary, not an OS or distributed exactly-once guarantee.
 
-## Verification and remaining work
+## Private populations and preserving reset
 
 ```sh
-uv run --locked --group dev pytest -q
+uv run --locked support-escalation-cases list
+uv run --locked support-escalation-cases init --case busy-due --root workspace/busy
+uv run --locked support-escalation-cases inspect --root workspace/busy
+uv run --locked support-escalation-cases reset --root workspace/busy --new-root workspace/busy-reset
 ```
 
-All150current checks pass: original compatibility flows, strict source/history, actual managed SQL/current authority, actual Anthropic and Pipedream SDK/HTTP/OAuth, normal CLI/ASGI/served webhook, all signals/cancellation, current events, original response faults, uncertainty/no-replay, failed closes, writer locks and recording loss after effects. The canonical served remote path and termination during an action are exercised outside checkout. Controlled HTTP uses synthetic keys and owned servers; it is not live model, Pipedream, Slack or Firedrill proof.
+There are three cases in each starter, busy, ambiguous and boundary profile. Busy histories contain48tickets,72prior events,16prior notifications and96explicit human steps, including eight local queues and eight uncertain remote reservations. Prior model execution, authentication and actual delivery remain unknown. The original starter is preserved byte for byte. Baselines may explicitly declare a safe initial revision; they cannot import an escalation or native authority.
 
-Next are12coherent private starter/busy/ambiguous/boundary populations with preserving separate resets, then fresh wheel/sdist/complete/production-only package qualification and exact Linux/downloaded source equality. No independent completion claim is made before those gates. Live provider/account/budget/semantic and billing review, new Firedrill qualification and publication/license remain parked. This private repository has no selected public license.
+Private case commands use no model or account and return no runtime capability. They bind the pinned case/fixture, original SQL baseline, source UUID/physical identity and private root/control. Reset exclusively creates a separate root with a fresh source UUID and seed, records its predecessor and preserves every old source effect and receipt. Existing targets, overlaps, aliases, copied/altered controls, imported capabilities and abandoned mutexes refuse without repair. Private expected outcomes and concurrent setup are never supplied to the model. Immutable installed assets may have installer hardlinks; mutable source and explicit fixture aliases remain refused.
 
-See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). The retired product is not an integration target. Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).
+## Verification and distributions
+
+```sh
+uv run --locked python scripts/build_populations.py --check
+uv run --locked --group dev pytest -q
+uv build
+uv run --locked --group dev python scripts/check_distribution.py
+```
+
+The suite covers the original compatibility flows, strict source/history, managed SQL/current authority, actual Anthropic and Pipedream SDK/HTTP/OAuth, normal CLI/ASGI/served webhook, all signals/cancellation, current events, original response faults, uncertainty/no replay, failed closes, writer locks, recording loss after effects and all12private case/reset paths. Controlled HTTP uses synthetic keys and owned servers; it is not live model, Pipedream, Slack or Firedrill proof.
+
+The distribution gate installs the wheel, source distribution and complete portable source outside the checkout using locked dependency hashes, with full development and production-only environments. Installed runs exercise all12cases, the real SDKs over owned HTTP, normal CLI/all three signals, missing credentials and an incomplete response after an earlier clock commit. Complete source reruns the whole suite. The portable source archive records every original file byte, mode and hash, is reproduced repeatedly, and is compared with the exact successful Linux download before independent completion is recorded in the catalog.
+
+Live provider/account/budget/semantic and billing review, new Firedrill qualification and publication/license remain parked. This private repository has no selected public license.
+
+See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).

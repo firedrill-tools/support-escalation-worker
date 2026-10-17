@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
 
 from .managed import ManagedSource
 
@@ -24,12 +23,12 @@ def main():
     )
     parser.add_argument("--fixture")
     args = parser.parse_args(argv)
-    fixture = (
-        Path(args.fixture)
-        if args.fixture
-        else Path(__file__).parents[2] / "fixtures/starter.json"
-    )
-    source = ManagedSource.seed(args.db, fixture)
+    if args.fixture:
+        source = ManagedSource.seed(args.db, args.fixture)
+    else:
+        from .assets import read_asset
+
+        source = ManagedSource.seed_bytes(args.db, read_asset("starter.json"))
     try:
         result = {
             "database": str(source.path),

@@ -22,7 +22,10 @@ PROVENANCE = {
 
 
 def validate(data):
-    if type(data) is dict and set(data) == {"tickets"}:
+    if type(data) is dict and set(data) in (
+        {"tickets"},
+        {"tickets", "baselineVersion"},
+    ):
         return {"business": initial(data), "origin": None, "history": []}
     keys(data, {"schemaVersion", "origin", "business", "history"})
     if type(data["schemaVersion"]) is not int or data["schemaVersion"] != 1:

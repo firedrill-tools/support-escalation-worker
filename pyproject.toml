@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "support-escalation-worker"
-version = "0.1.0"
+version = "0.2.0"
+readme = "README.md"
 description = "Anthropic-backed synthetic support escalation webhook with Pipedream action seam"
 requires-python = ">=3.12"
 dependencies = ["anthropic==1.14.0", "pipedream==2.1.20", "fastapi==0.143.2", "uvicorn==0.54.0", "pydantic==2.14.1", "httpx2==2.13.1", "httpx==0.28.1"]
@@ -14,6 +15,7 @@ support-escalation = "support_escalation.cli:main"
 support-escalation-state = "support_escalation.managed_cli:main"
 support-escalation-local = "support_escalation.local_cli:main"
 support-escalation-managed = "support_escalation.managed_server:main"
+support-escalation-cases = "support_escalation.cases:main"
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
@@ -23,3 +25,6 @@ packages = ["src/support_escalation"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "fixtures", "scenarios", "tests", "scripts", ".github", "README.md", "AGENTS.md", "PLAN.md", "COMPATIBILITY.md", "pyproject.toml", "uv.lock", ".gitignore"]

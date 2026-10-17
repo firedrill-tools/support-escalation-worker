@@ -78,13 +78,26 @@ def eligible(row, now):
 
 
 def initial(value):
-    keys(value, {"tickets"})
+    declared_revision = type(value) is dict and "baselineVersion" in value
+    keys(value, {"tickets", "baselineVersion"} if declared_revision else {"tickets"})
+    if declared_revision and (
+        type(value["baselineVersion"]) is not int or value["baselineVersion"] != 1
+    ):
+        raise ValueError("explicit revision baselineVersion1 required")
     if type(value["tickets"]) is not list or not 1 <= len(value["tickets"]) <= 128:
         raise ValueError("nonempty bounded support ticket fixture required")
     rows = []
     for row in value["tickets"]:
-        keys(row, BASE_FIELDS)
-        rows.append(ticket({**deepcopy(row), "revision": 1, "escalated_at": None}))
+        keys(row, BASE_FIELDS | ({"revision"} if declared_revision else set()))
+        rows.append(
+            ticket(
+                {
+                    **deepcopy(row),
+                    "revision": row.get("revision", 1),
+                    "escalated_at": None,
+                }
+            )
+        )
     result = {"tickets": rows, "events": [], "outbox": []}
     validate(result)
     return result
