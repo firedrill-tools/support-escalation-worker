@@ -13,7 +13,7 @@ npm test --prefix firedrill
 node firedrill/node_modules/@firedrill-run/cli/bin/firedrill.mjs validate firedrill/scenario.json --json --non-interactive
 ```
 
-Validation is offline. In a human terminal, use the same CLI `init` to authorize/select the actual project/environment. Automation uses protected `FIREDRILL_TOKEN`, `FIREDRILL_PROJECT_ID`, `FIREDRILL_ENVIRONMENT_ID`. Model operations independently need `ANTHROPIC_API_KEY` and an enabled `ESCALATION_MODEL` or recipe model parameter. Do not put credentials in recipes.
+Validation is offline. In a human terminal, use the same CLI `init` to authorize/select the actual project/environment. Automation uses protected `FIREDRILL_TOKEN`, `FIREDRILL_PROJECT_ID`, `FIREDRILL_ENVIRONMENT_ID`. Model operations independently need `ANTHROPIC_API_KEY` and an enabled `ANTHROPIC_MODEL` or recipe model parameter. Do not put credentials in recipes.
 
 After scope and provider budget are authorized:
 
