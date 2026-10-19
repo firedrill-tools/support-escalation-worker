@@ -86,3 +86,7 @@ The distribution gate installs the wheel, source distribution and complete porta
 Live provider/account/budget/semantic and billing review, new Firedrill qualification and publication/license remain parked. This private repository has no selected public license.
 
 See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).
+
+## Current Firedrill integration
+
+Released CLI/SDK 2.2.2, current command invocation, remote operator MCP and recovery are documented in [firedrill/README.md](firedrill/README.md). Offline checks preserve the actual owned webhook/private source and separate local write authority. Authenticated persisted runs and live quality/cost remain separate parked gates.

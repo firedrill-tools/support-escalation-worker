@@ -8,3 +8,6 @@ workspace/
 dist/
 build/
 artifacts/
+
+node_modules/
+.runs/

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "2026-10-14",
+  "name": "Support escalation \u2014 actual owned webhook and local action seam",
+  "target": {
+    "kind": "command",
+    "argv": [
+      "node",
+      "firedrill/target.mjs"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "starter-due",
+      "name": "starter-due event",
+      "input": {
+        "caseId": "starter-due",
+        "action": "event",
+        "event": {
+          "event_id": "EV-RUN-0001",
+          "ticket_id": "T-501",
+          "kind": "clock_tick",
+          "occurred_at": "2026-10-15T12:30:00Z"
+        },
+        "allowWrites": true
+      }
+    },
+    {
+      "id": "ambiguous-reply",
+      "name": "ambiguous-reply event",
+      "input": {
+        "caseId": "ambiguous-reply",
+        "action": "event",
+        "event": {
+          "event_id": "EV-RUN-0001",
+          "ticket_id": "T-501",
+          "kind": "clock_tick",
+          "occurred_at": "2026-10-15T12:30:00Z"
+        },
+        "allowWrites": false
+      }
+    },
+    {
+      "id": "busy-due",
+      "name": "busy-due inspect",
+      "input": {
+        "caseId": "busy-due",
+        "action": "inspect",
+        "event": null,
+        "allowWrites": false
+      }
+    }
+  ],
+  "repetitions": 1,
+  "concurrency": 1,
+  "limits": {
+    "timeoutMs": 240000,
+    "maxRuns": 3,
+    "maxOutputBytes": 4194304
+  }
+}
