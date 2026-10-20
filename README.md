@@ -89,7 +89,7 @@ The distribution gate installs the wheel, source distribution and complete porta
 
 Live provider/account/budget/semantic and billing review, authenticated Firedrill persistence verification and license remain parked. This public repository has no selected project license.
 
-See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).
+See the [Firedrill examples](https://docs.firedrill.run/guides/examples), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Current Firedrill integration
 
