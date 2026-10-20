@@ -2,18 +2,24 @@
 
 The optional toolchain pins released `@firedrill-run/cli` and `@firedrill-run/sdk` **2.2.2** (October 19, 2026), Node 22+. The app retains its locked native provider/framework dependencies.
 
-## Prepare and run
+## Set up Firedrill
 
-From the repository root:
+From the repository root, install this application's locked dependencies and the optional simulation clients:
 
 ```sh
 uv sync --locked --dev
 npm ci --prefix firedrill --ignore-scripts --no-audit --no-fund
-npm test --prefix firedrill
-node firedrill/node_modules/@firedrill-run/cli/bin/firedrill.mjs validate firedrill/scenario.json --json --non-interactive
 ```
 
-Validation is offline. In a human terminal, use the same CLI `init` to authorize/select the actual project/environment. Automation uses protected `FIREDRILL_TOKEN`, `FIREDRILL_PROJECT_ID`, `FIREDRILL_ENVIRONMENT_ID`. Model operations independently need `ANTHROPIC_API_KEY` and an enabled `ANTHROPIC_MODEL` or recipe model parameter. Do not put credentials in recipes.
+Sign in and choose the Firedrill project and environment once:
+
+```sh
+npx firedrill-run init
+```
+
+Complete browser authorization when prompted. Initialization writes `firedrill.config.json` in this repository; it does not run the AI agent. Installation choices are optional: skip duplicate SDK/client installation if you are using the locked `firedrill/` toolchain above. Keep this application's runtime requirements from the root README; the clients' Node.js minimum does not replace them.
+
+Automation uses protected `FIREDRILL_TOKEN`, `FIREDRILL_PROJECT_ID`, `FIREDRILL_ENVIRONMENT_ID`. Model operations independently need `ANTHROPIC_API_KEY` and an enabled `ANTHROPIC_MODEL` or recipe model parameter. Do not put credentials in recipes.
 
 After scope and provider budget are authorized:
 
@@ -27,6 +33,17 @@ The bounded sequential recipe initializes an actual private support case and inv
 Action mode is hard-pinned to `local` with Pipedream actions disabled, even under ambient connector configuration. No real notification delivery or operator assertion is configured. HTTP/body, business outcome, model receipt and delivery are distinct evidence. Actual request failure (including HTTP503 key preflight) remains nonzero. The owned admission closes and drains before target success; normal per-event native/client/source cleanup remains authoritative. Busy inspection makes no model/API request. A new source replay or queued event is not evidence of a fresh model call.
 
 Each attempt saves validated outer run/attempt/scenario IDs in private `.runs/firedrill/attempt-*/invocation.json` before creating a distinct absent workspace leaf. Complete actual private initialization/inspection objects are saved outside the model workspace as 0600 files, with byte count and SHA-256 in a bounded summary (64 MiB retained-file bound, separate from 4 MiB command output). Private reference/seed/control/oracle fields stay outside model input. The actual initialized database is checked inside its owned workspace. Earlier DB/WAL/SHM, decisions/effects and receipts are never reset by a new attempt. Application failure is nonzero with original stdout/stderr/run directory; preserve earlier effects and unknown cleanup/publication/billing outcomes. Paths are local evidence, not uploaded platform artifacts. Existing native cancellation/close/source lifecycle remains authoritative; local termination does not establish rollback or provider cancellation. Current ID-only invocation excludes controller assessment data, rejects unsupported Tool bindings and removes operator/CI credentials before dispatch.
+
+## Offline verification
+
+These checks are optional when getting started; they do not authorize an account or run a paid model:
+
+```sh
+node firedrill/node_modules/@firedrill-run/cli/bin/firedrill.mjs validate firedrill/scenario.json --json --non-interactive
+npm test --prefix firedrill
+```
+
+The saved recipe is an observation/exploration example, not a claim of agent correctness. It has no Firedrill rubric or CI gate. Execution success and any application-owned checks are distinct from a scored assessment. Local evidence paths are not uploaded captures; the evidence and proof limits described in this guide remain in effect.
 
 ## MCP and recovery
 
