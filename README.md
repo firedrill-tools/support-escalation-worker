@@ -4,6 +4,8 @@ A webhook worker handles synthetic ticket updates and explicit clock ticks. An o
 
 Simulate this Anthropic API AI agent with [Firedrill](https://firedrill.run/), a simulation platform for AI agents. Start with the [Firedrill setup and simulation guide](firedrill/README.md); your coding agent can operate it while this application's runner stays in your repository or CI.
 
+This example repository is publicly viewable. A project license has not been selected.
+
 ## Run
 
 Requires Python3.12+ and [uv](https://docs.astral.sh/uv/).
@@ -85,7 +87,7 @@ The suite covers the original compatibility flows, strict source/history, manage
 
 The distribution gate installs the wheel, source distribution and complete portable source outside the checkout using locked dependency hashes, with full development and production-only environments. Installed runs exercise all12cases, the real SDKs over owned HTTP, normal CLI/all three signals, missing credentials and an incomplete response after an earlier clock commit. Complete source reruns the whole suite. The portable source archive records every original file byte, mode and hash, is reproduced repeatedly, and is compared with the exact successful Linux download before independent completion is recorded in the catalog.
 
-Live provider/account/budget/semantic and billing review, authenticated Firedrill persistence verification and publication/license remain parked. This private repository has no selected public license.
+Live provider/account/budget/semantic and billing review, authenticated Firedrill persistence verification and license remain parked. This public repository has no selected project license.
 
 See the [example catalog](https://github.com/firedrill-tools/firedrill-example-catalog), [Firedrill](https://firedrill.run/) and its [current official documentation](https://docs.firedrill.run/). Version/proof details are in [PLAN.md](PLAN.md) and [COMPATIBILITY.md](COMPATIBILITY.md).
 
